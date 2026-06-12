@@ -52,6 +52,55 @@ function readParams(){
   return p;
 }
 
+function serializeState(){
+  const state = {
+    S,
+    sliders: SLIDERS.reduce((a, s) => ({...a, [s.id]: $(s.id).value}), {}),
+    inputs: ["routeShare", "vectorFixed", "saasFixed", "runtimeFixed", "obsPerTrace", "egressCloud", "egressGB", "gpuCount", "throughput", "utilization"].reduce((a, id) => ({...a, [id]: $(id).value}), {}),
+    tools: DATA.tools.map(t => ({id: t.id, on: t.on, price: t.price, calls: t.calls}))
+  };
+  return btoa(JSON.stringify(state));
+}
+
+function applyState(state){
+  Object.assign(S, state.S);
+  if ($("modelSelect")) $("modelSelect").value = S.model;
+  if ($("gpuSelect")) $("gpuSelect").value = S.gpu;
+  for (const s of SLIDERS) {
+    if (state.sliders[s.id] !== undefined) {
+      $(s.id).value = state.sliders[s.id];
+      $(s.id+"Val").textContent = s.pct ? $(s.id).value+"%" : (+$(s.id).value).toLocaleString();
+    }
+  }
+  for (const [id, val] of Object.entries(state.inputs)) {
+    if ($(id)) {
+      $(id).value = val;
+      if (id === "routeShare") $("routeVal").textContent = val+"%";
+      if (id === "throughput") $("tpVal").textContent = (+val).toLocaleString();
+      if (id === "utilization") $("utilVal").textContent = val+"%";
+    }
+  }
+  for (const st of state.tools) {
+    const t = DATA.tools.find(x => x.id === st.id);
+    if (t) { t.on = st.on; t.price = st.price; t.calls = st.calls; }
+  }
+  buildTools();
+  setPreset(S.preset);
+  render();
+}
+
+function loadStateFromUrl(){
+  const hash = window.location.hash;
+  if (hash.startsWith("#s=")) {
+    try {
+      const state = JSON.parse(atob(hash.substring(3)));
+      applyState(state);
+      return true;
+    } catch (e) { console.error("Failed to load state from URL", e); }
+  }
+  return false;
+}
+
 function selfHosted(p, monthlyTokens){
   const gpu = DATA.gpus.find(g=>g.id===S.gpu);
   const n = +$("gpuCount").value, tp = +$("throughput").value, util = +$("utilization").value/100;
@@ -250,5 +299,15 @@ function buildPriceEdit(){
 
 ["vectorFixed","saasFixed","runtimeFixed","obsPerTrace","egressGB"].forEach(id=>{ window.addEventListener("DOMContentLoaded",()=>{ $(id).oninput=render; $("egressCloud").onchange=render; }); });
 
+$("copyBtn").onclick = () => {
+  const url = window.location.origin + window.location.pathname + "#s=" + serializeState();
+  history.replaceState(null, null, url);
+  navigator.clipboard.writeText(url).then(() => {
+    const old = $("copyBtn").textContent;
+    $("copyBtn").textContent = "Copied!";
+    setTimeout(() => $("copyBtn").textContent = old, 2000);
+  });
+};
+
 buildSliders(); buildModels(); buildTools(); buildGpus(); buildPresets(); buildPriceEdit();
-applyPreset("medium");
+if (!loadStateFromUrl()) applyPreset("medium");
