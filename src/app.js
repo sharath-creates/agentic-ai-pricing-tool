@@ -7,87 +7,33 @@ const fmt = (n, d) => {
 };
 const fmtTok = n => n >= 1e6 ? (n/1e6).toFixed(2)+"M" : n >= 1e3 ? (n/1e3).toFixed(1)+"k" : String(Math.round(n));
 
-/* ============ CORE MATH ============ */
-// Tokens for one task. Context grows each step: step i input = sys + user + (i-1)*(out + toolResult)
-function taskTokens(p){
-  const N = p.steps, base = p.sysTokens + p.userTokens, grow = p.outPerStep + p.toolTokens;
-  const totalInput  = N*base + grow * (N*(N-1)/2);
-  const totalOutput = N * p.outPerStep;
-  const newTokens   = N * grow;            // freshly written context (cache-write candidates)
-  return {totalInput, totalOutput, newTokens};
-}
-
-function llmCostPerTask(p, model){
-  const t = taskTokens(p);
-  const h = p.cacheHit/100;
-  const inP = model.inP/1e6, outP = model.outP/1e6;
-  // cached share billed at cacheRead multiplier, uncached at full rate
-  let cost = t.totalInput * ((1-h) + h*model.cacheRead) * inP + t.totalOutput * outP;
-  // cache write premium on newly appended tokens (Anthropic-style), only meaningful if caching is used
-  if (model.cacheWrite > 1 && h > 0) cost += t.newTokens * inP * (model.cacheWrite - 1);
-  return {cost, t};
-}
-
-function blendedLLM(p){
-  const m = DATA.models.find(x=>x.id===S.model);
-  const share = p.route/100;
-  const main = llmCostPerTask(p, m);
-  if (share <= 0) return {cost:main.cost, t:main.t, m};
-  const cheap = DATA.models.find(x=>x.id===DATA.cheapestInFamily[m.family]);
-  if (!cheap || cheap.id === m.id) return {cost:main.cost, t:main.t, m};
-  const c = llmCostPerTask(p, cheap);
-  return {cost: main.cost*(1-share) + c.cost*share, t:main.t, m};
-}
-
-function toolCostPerTask(){
-  let sum = 0;
-  for (const tl of DATA.tools) if (tl.on && tl.calls>0) sum += tl.price * tl.calls;
-  return sum;
-}
-
-function readParams(){
+/* ============ WRAPPERS ============ */
+function readParams() {
   const p = {};
   for (const s of SLIDERS) p[s.id] = +$(s.id).value;
   p.route = +$("routeShare").value;
+  p.modelId = S.model;
+  p.gpuId = S.gpu;
+  p.gpuCount = +$("gpuCount").value;
+  p.throughput = +$("throughput").value;
+  p.utilization = +$("utilization").value;
+  p.vectorFixed = +$("vectorFixed").value;
+  p.saasFixed = +$("saasFixed").value;
+  p.runtimeFixed = +$("runtimeFixed").value;
+  p.obsPerTrace = +$("obsPerTrace").value;
+  p.egressGB = +$("egressGB").value;
+  p.egressCloud = +$("egressCloud").value;
+  p.tools = {};
+  for (const tl of DATA.tools) if (tl.on) p.tools[tl.id] = tl.calls;
   return p;
-}
-
-function selfHosted(p, monthlyTokens){
-  const gpu = DATA.gpus.find(g=>g.id===S.gpu);
-  const n = +$("gpuCount").value, tp = +$("throughput").value, util = +$("utilization").value/100;
-  const monthlyFixed = gpu.rate * n * 730;
-  const capacityTokens = tp * 3600 * 730 * util;     // tokens/month at this utilization
-  const perM = monthlyFixed / (capacityTokens/1e6);  // effective $/M tokens
-  return {gpu, n, monthlyFixed, capacityTokens, perM, covered: capacityTokens >= monthlyTokens};
 }
 
 /* ============ RENDER ============ */
 let breakChart, breakevenChart;
-const COLORS = ["#5b9cff","#34d399","#fbbf24","#f87171","#a78bfa","#22d3ee","#f472b6"];
+const COLORS = ["#5b9cff", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#22d3ee", "#f472b6"];
 
-function compute(){
-  const p = readParams();
-  const days = 30.4;
-  const llm = blendedLLM(p);
-  const tools = toolCostPerTask();
-  const obs = +$("obsPerTrace").value;
-  const perTaskVar = llm.cost + tools + obs;
-
-  const tasksMo = p.tasksPerDay * days;
-  const llmMo = llm.cost * tasksMo;
-  const toolsMo = tools * tasksMo;
-  const obsMo = obs * tasksMo;
-  const fixedMo = (+$("vectorFixed").value) + (+$("saasFixed").value) + (+$("runtimeFixed").value);
-  const egressMo = Math.max(0, (+$("egressGB").value) - 100) * (+$("egressCloud").value);
-  const totalMo = llmMo + toolsMo + obsMo + fixedMo + egressMo;
-  const perTask = totalMo / tasksMo;
-  const perDay = totalMo / days;
-
-  const monthlyTokens = (llm.t.totalInput + llm.t.totalOutput) * tasksMo;
-  const sh = selfHosted(p, monthlyTokens);
-  const shTotal = sh.monthlyFixed + toolsMo + obsMo + fixedMo + egressMo;
-
-  return {p, llm, tools, obs, perTaskVar, tasksMo, llmMo, toolsMo, obsMo, fixedMo, egressMo, totalMo, perTask, perDay, monthlyTokens, sh, shTotal};
+function compute() {
+  return computeCosts(readParams(), DATA);
 }
 
 function render(){
