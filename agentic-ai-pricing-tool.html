@@ -169,6 +169,12 @@
       </div>
 
       <div class="panel">
+        <h2>Sensitivity analysis</h2>
+        <div class="sub" style="margin-bottom:12px;">How the monthly bill changes if one input moves ±20%.</div>
+        <div style="height:240px;"><canvas id="tornadoChart"></canvas></div>
+      </div>
+
+      <div class="panel">
         <h2>Same workload across models</h2>
         <div class="sub" style="margin-bottom:8px;">Click a row to switch the primary model.</div>
         <table id="modelTable">
@@ -308,12 +314,21 @@ function readParams(){
   const p = {};
   for (const s of SLIDERS) p[s.id] = +$(s.id).value;
   p.route = +$("routeShare").value;
+  p.obsPerTrace = +$("obsPerTrace").value;
+  p.vectorFixed = +$("vectorFixed").value;
+  p.saasFixed = +$("saasFixed").value;
+  p.runtimeFixed = +$("runtimeFixed").value;
+  p.egressGB = +$("egressGB").value;
+  p.egressCloud = +$("egressCloud").value;
+  p.gpuCount = +$("gpuCount").value;
+  p.throughput = +$("throughput").value;
+  p.utilization = +$("utilization").value;
   return p;
 }
 
 function selfHosted(p, monthlyTokens){
   const gpu = DATA.gpus.find(g=>g.id===S.gpu);
-  const n = +$("gpuCount").value, tp = +$("throughput").value, util = +$("utilization").value/100;
+  const n = p.gpuCount, tp = p.throughput, util = p.utilization/100;
   const monthlyFixed = gpu.rate * n * 730;
   const capacityTokens = tp * 3600 * 730 * util;     // tokens/month at this utilization
   const perM = monthlyFixed / (capacityTokens/1e6);  // effective $/M tokens
@@ -321,23 +336,22 @@ function selfHosted(p, monthlyTokens){
 }
 
 /* ============ RENDER ============ */
-let breakChart, breakevenChart;
+let breakChart, breakevenChart, tornadoChart;
 const COLORS = ["#5b9cff","#34d399","#fbbf24","#f87171","#a78bfa","#22d3ee","#f472b6"];
 
-function compute(){
-  const p = readParams();
+function compute(p = readParams()){
   const days = 30.4;
   const llm = blendedLLM(p);
   const tools = toolCostPerTask();
-  const obs = +$("obsPerTrace").value;
+  const obs = p.obsPerTrace;
   const perTaskVar = llm.cost + tools + obs;
 
   const tasksMo = p.tasksPerDay * days;
   const llmMo = llm.cost * tasksMo;
   const toolsMo = tools * tasksMo;
   const obsMo = obs * tasksMo;
-  const fixedMo = (+$("vectorFixed").value) + (+$("saasFixed").value) + (+$("runtimeFixed").value);
-  const egressMo = Math.max(0, (+$("egressGB").value) - 100) * (+$("egressCloud").value);
+  const fixedMo = p.vectorFixed + p.saasFixed + p.runtimeFixed;
+  const egressMo = Math.max(0, p.egressGB - 100) * p.egressCloud;
   const totalMo = llmMo + toolsMo + obsMo + fixedMo + egressMo;
   const perTask = totalMo / tasksMo;
   const perDay = totalMo / days;
@@ -426,6 +440,77 @@ function render(){
     "Total output: <b>" + fmtTok(t.totalOutput) + "</b> · New context written: " + fmtTok(t.newTokens) + ".<br>" +
     "At " + r.p.cacheHit + "% cache hit, " + fmtTok(t.totalInput*h) + " input tokens bill at " + (m.cacheRead*100) + "% of the input rate.<br>" +
     "Model cost per task: <b>" + fmt(r.llm.cost) + "</b> · Tools: " + fmt(r.tools) + " · Observability: " + fmt(r.obs) + ".";
+
+  renderTornado(r);
+}
+
+function renderTornado(r) {
+  const inputs = [
+    {id:"steps", label:"Steps/task"},
+    {id:"outPerStep", label:"Output tokens/step"},
+    {id:"toolTokens", label:"Tool tokens/step"},
+    {id:"sysTokens", label:"System tokens"},
+    {id:"userTokens", label:"User tokens"},
+    {id:"routeShare", label:"Route share"},
+    {id:"cacheHit", label:"Cache hit rate"},
+    {id:"tasksPerDay", label:"Tasks/day"}
+  ];
+
+  const baseline = r.totalMo;
+  const results = inputs.map(inp => {
+    const pLow = {...r.p}, pHigh = {...r.p};
+    if (inp.id === "cacheHit") {
+      pLow[inp.id] = Math.max(0, r.p[inp.id] * 0.8);
+      pHigh[inp.id] = Math.min(95, r.p[inp.id] * 1.2);
+    } else {
+      pLow[inp.id] = r.p[inp.id] * 0.8;
+      pHigh[inp.id] = r.p[inp.id] * 1.2;
+    }
+    const lowCost = compute(pLow).totalMo;
+    const highCost = compute(pHigh).totalMo;
+    return {
+      label: inp.label,
+      low: lowCost - baseline,
+      high: highCost - baseline,
+      impact: Math.abs(highCost - lowCost)
+    };
+  });
+
+  results.sort((a,b) => b.impact - a.impact);
+
+  const labels = results.map(x => x.label);
+  const lowData = results.map(x => x.low);
+  const highData = results.map(x => x.high);
+
+  if (tornadoChart) {
+    tornadoChart.data.labels = labels;
+    tornadoChart.data.datasets[0].data = lowData;
+    tornadoChart.data.datasets[1].data = highData;
+    tornadoChart.update();
+  } else {
+    tornadoChart = new Chart($("tornadoChart"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {label: "-20%", data: lowData, backgroundColor: "#f87171"},
+          {label: "+20%", data: highData, backgroundColor: "#34d399"}
+        ]
+      },
+      options: {
+        indexAxis: "y",
+        plugins: {
+          legend: {display: false},
+          tooltip: {callbacks: {label: ctx => (ctx.raw > 0 ? "+" : ctx.raw < 0 ? "-" : "") + fmt(Math.abs(ctx.raw), 0) + "/mo"}}
+        },
+        scales: {
+          x: {ticks: {color: "#8b94a8", callback: v => (v > 0 ? "+" : v < 0 ? "-" : "") + "$" + Math.abs(v)}, grid: {color: "#1f2735"}},
+          y: {ticks: {color: "#8b94a8"}, grid: {display: false}}
+        },
+        maintainAspectRatio: false
+      }
+    });
+  }
 }
 
 /* ============ UI BUILD ============ */
