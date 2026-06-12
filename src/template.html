@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentic AI Pricing Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/*__STYLES__*/
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Agentic AI Pricing Tool</h1>
+      <div class="sub">Cost model for agent workloads: model inference, the agent loop multiplier, tools and MCP integrations, infrastructure, and the self-hosted alternative.</div>
+    </div>
+    <div class="badge">Pricing data as of June 12, 2026 · all prices editable below</div>
+  </header>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="grid">
+    <div><!-- LEFT: pickers -->
+
+      <div class="panel">
+        <h2>Workload</h2>
+        <div id="workload-sliders"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Model</h2>
+        <div class="row"><label>Primary model</label></div>
+        <select id="modelSelect"></select>
+        <div class="slider-row" style="margin-top:12px;">
+          <div class="top"><label>Route easy steps to a cheap model <span class="hint">Fraction of steps handled by the cheapest model in the same family</span></label><span class="val" id="routeVal">0%</span></div>
+          <input type="range" id="routeShare" min="0" max="80" step="5" value="0">
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Tools &amp; MCP integrations</h2>
+        <div class="sub" style="margin-bottom:10px;">Per-call costs of what the agent touches. Adjust calls per task and unit price.</div>
+        <div class="tool-row" style="color:var(--muted); font-size:11px;"><span></span><span>Tool</span><span>$ / call</span><span>calls/task</span></div>
+        <div id="tools"></div>
+        <div class="row" style="margin-top:14px;"><label>Vector DB storage <span class="hint">Pinecone-class, $/month</span></label><input type="number" class="small" id="vectorFixed" value="25" min="0" step="5"></div>
+        <div class="row"><label>SaaS connector seats/tiers <span class="hint">Slack, Jira, CRM API tiers the MCP servers need, $/month</span></label><input type="number" class="small" id="saasFixed" value="50" min="0" step="10"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Infrastructure &amp; network</h2>
+        <div class="row"><label>Agent runtime hosting <span class="hint">Containers or serverless for the loop, $/month</span></label><input type="number" class="small" id="runtimeFixed" value="30" min="0" step="10"></div>
+        <div class="row"><label>Observability <span class="hint">$/trace (Langfuse-unit class). 1 trace per task.</span></label><input type="number" class="small" id="obsPerTrace" value="0.0005" min="0" step="0.0005"></div>
+        <div class="row"><label>Egress cloud</label>
+          <select id="egressCloud" style="width:130px;">
+            <option value="0.09">AWS $0.09/GB</option>
+            <option value="0.087">Azure $0.087/GB</option>
+            <option value="0.12">GCP $0.12/GB</option>
+            <option value="0">None / free tier</option>
+          </select>
+        </div>
+        <div class="row"><label>Egress volume <span class="hint">GB/month</span></label><input type="number" class="small" id="egressGB" value="20" min="0" step="10"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Self-hosted comparison</h2>
+        <div class="sub" style="margin-bottom:10px;">Open-weight model on rented GPUs vs the API bill above.</div>
+        <div class="row"><label>GPU</label><select id="gpuSelect" style="width:200px;"></select></div>
+        <div class="row"><label>GPU count</label><input type="number" class="small" id="gpuCount" value="1" min="1" max="64" step="1"></div>
+        <div class="slider-row">
+          <div class="top"><label>Aggregate throughput <span class="hint">tokens/sec across all GPUs, batched vLLM-class serving</span></label><span class="val" id="tpVal">1200</span></div>
+          <input type="range" id="throughput" min="100" max="10000" step="100" value="1200">
+        </div>
+        <div class="slider-row">
+          <div class="top"><label>Utilization <span class="hint">Share of rented hours doing useful work</span></label><span class="val" id="utilVal">50%</span></div>
+          <input type="range" id="utilization" min="5" max="95" step="5" value="50">
+        </div>
+        <div class="sh-note" id="shNote"></div>
+      </div>
+
+    </div>
+    <div><!-- RIGHT: results -->
+
+      <div class="kpis">
+        <div class="kpi"><div class="label">Cost per task</div><div class="value" id="kpiTask">–</div><div class="delta" id="kpiTaskSub"></div></div>
+        <div class="kpi"><div class="label">Per day</div><div class="value" id="kpiDay">–</div><div class="delta" id="kpiDaySub"></div></div>
+        <div class="kpi"><div class="label">Per month</div><div class="value" id="kpiMonth">–</div><div class="delta" id="kpiMonthSub"></div></div>
+        <div class="kpi"><div class="label">Self-hosted / month</div><div class="value" id="kpiSelf">–</div><div class="delta" id="kpiSelfSub"></div></div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-box">
+          <h2>Monthly cost breakdown</h2>
+          <canvas id="breakChart"></canvas>
+        </div>
+        <div class="chart-box">
+          <h2>API vs self-hosted breakeven</h2>
+          <canvas id="breakevenChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h2>Where the money goes (monthly)</h2>
+        <div class="breakdown-list" id="breakList"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Same workload across models</h2>
+        <div class="sub" style="margin-bottom:8px;">Click a row to switch the primary model.</div>
+        <table id="modelTable">
+          <thead><tr><th>Model</th><th class="num">$/M in</th><th class="num">$/M out</th><th class="num">Per task</th><th class="num">Per month</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Token math for one task</h2>
+        <div id="tokenMath" style="font-size:12.5px; line-height:1.8;"></div>
+      </div>
+
+      <div class="panel">
+        <details>
+          <summary>Edit the embedded price dataset (model rates, GPU rates)</summary>
+          <div style="margin-top:10px;">
+            <table id="priceEdit"><thead><tr><th>Model</th><th class="num">$/M input</th><th class="num">$/M output</th><th class="num">Cache read ×</th></tr></thead><tbody></tbody></table>
+            <table id="gpuEdit" style="margin-top:14px;"><thead><tr><th>GPU option</th><th class="num">$/GPU-hour</th></tr></thead><tbody></tbody></table>
+          </div>
+        </details>
+        <div class="footnote">
+          Rates collected June 12, 2026 from provider pricing pages and public trackers. Anthropic: Fable 5 $10/$50, Opus 4.8 $5/$25, Sonnet 4.6 $3/$15, Haiku 4.5 $1/$5 per million tokens; cache reads 10% of input, cache writes 1.25×. OpenAI: GPT-5.5 $5/$30, GPT-5.4 $2.50/$15, cached input at 10%. Google: Gemini 3.1 Pro $2/$12, 3.5 Flash $1.50/$9, 3 Flash $0.50/$3. DeepSeek V4 Flash $0.14/$0.28 with ~98% cache-hit discount. GPU rates span neoclouds (Lambda, RunPod) to hyperscalers (AWS, GCP, Azure). Egress: first 100 GB/month free on the big three, then the per-GB rates shown. Throughput defaults assume a 70B-class FP8 model under batched vLLM serving; tune the slider to your own benchmark. This is an estimate model, not a quote.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+//__SCRIPT__
+</script>
+</body>
+</html>
