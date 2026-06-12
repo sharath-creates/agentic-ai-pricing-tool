@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentic AI Pricing Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b24; --panel2:#1c2330; --border:#2a3346;
+    --text:#e6e9f0; --muted:#8b94a8; --accent:#5b9cff; --accent2:#34d399;
+    --warn:#fbbf24; --bad:#f87171; --radius:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; padding:24px;}
+  h1{font-size:22px; font-weight:700;}
+  h2{font-size:15px; font-weight:600; margin-bottom:12px; color:var(--accent);}
+  .sub{color:var(--muted); font-size:12.5px; margin-top:4px;}
+  .wrap{max-width:1240px; margin:0 auto;}
+  header{display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:8px; margin-bottom:18px;}
+  .badge{background:var(--panel2); border:1px solid var(--border); border-radius:20px; padding:4px 12px; font-size:12px; color:var(--muted);}
+  .grid{display:grid; grid-template-columns:380px 1fr; gap:16px; align-items:start;}
+  @media(max-width:980px){.grid{grid-template-columns:1fr;}}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:16px;}
+  .presets{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;}
+  .preset{flex:1; min-width:100px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; cursor:pointer; text-align:center; transition:all .15s;}
+  .preset:hover{border-color:var(--accent);}
+  .preset.active{border-color:var(--accent); background:#1a2a45;}
+  .preset b{display:block; font-size:13px;}
+  .preset span{font-size:11px; color:var(--muted);}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;}
+  .row label{font-size:13px; color:var(--text);}
+  .row .hint{font-size:11px; color:var(--muted); display:block;}
+  input[type=range]{width:100%; accent-color:var(--accent);}
+  .slider-row{margin-bottom:14px;}
+  .slider-row .top{display:flex; justify-content:space-between; margin-bottom:2px;}
+  .slider-row .val{font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums;}
+  select,input[type=number]{background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 8px; font-size:13px; width:100%;}
+  input[type=number].small{width:80px; text-align:right;}
+  .tool-row{display:grid; grid-template-columns:20px 1fr 90px 80px; gap:8px; align-items:center; margin-bottom:8px;}
+  .tool-row .name{font-size:13px;}
+  .tool-row .price{font-size:11px; color:var(--muted);}
+  input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px;}
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px;}
+  @media(max-width:700px){.kpis{grid-template-columns:repeat(2,1fr);}}
+  .kpi{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px;}
+  .kpi .label{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .kpi .value{font-size:24px; font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums;}
+  .kpi .delta{font-size:11.5px; color:var(--muted);}
+  .charts{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media(max-width:700px){.charts{grid-template-columns:1fr;}}
+  .chart-box{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px; height:320px;}
+  .chart-box canvas{max-height:260px;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th{text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); font-size:11.5px;}
+  td{padding:6px 8px; border-bottom:1px solid #1f2735; font-variant-numeric:tabular-nums;}
+  td.num,th.num{text-align:right;}
+  tr.selected td{background:#1a2a45;}
+  tr.clickable{cursor:pointer;}
+  tr.clickable:hover td{background:#1d2433;}
+  details{margin-top:8px;}
+  summary{cursor:pointer; color:var(--muted); font-size:12.5px;}
+  .footnote{color:var(--muted); font-size:11.5px; margin-top:14px; line-height:1.6;}
+  .pill{display:inline-block; padding:1px 8px; border-radius:10px; font-size:10.5px; background:var(--panel2); border:1px solid var(--border); color:var(--muted);}
+  .breakdown-list{margin-top:8px;}
+  .breakdown-list .row{font-size:12.5px; margin-bottom:6px;}
+  .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px;}
+  .section-toggle{display:flex; gap:6px; margin-bottom:12px;}
+  .section-toggle button{flex:1; background:var(--panel2); color:var(--muted); border:1px solid var(--border); border-radius:6px; padding:7px; cursor:pointer; font-size:12.5px;}
+  .section-toggle button.active{color:var(--text); border-color:var(--accent); background:#1a2a45;}
+  .sh-note{font-size:12px; color:var(--muted); background:var(--panel2); border-radius:6px; padding:8px 10px; margin-top:10px; line-height:1.5;}
+  .good{color:var(--accent2);} .warntx{color:var(--warn);} .badtx{color:var(--bad);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Agentic AI Pricing Tool</h1>
+      <div class="sub">Cost model for agent workloads: model inference, the agent loop multiplier, tools and MCP integrations, infrastructure, and the self-hosted alternative.</div>
+    </div>
+    <div class="badge">Pricing data as of June 12, 2026 · all prices editable below</div>
+  </header>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="grid">
+    <div><!-- LEFT: pickers -->
+
+      <div class="panel">
+        <h2>Workload</h2>
+        <div id="workload-sliders"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Model</h2>
+        <div class="row"><label>Primary model</label></div>
+        <select id="modelSelect"></select>
+        <div class="slider-row" style="margin-top:12px;">
+          <div class="top"><label>Route easy steps to a cheap model <span class="hint">Fraction of steps handled by the cheapest model in the same family</span></label><span class="val" id="routeVal">0%</span></div>
+          <input type="range" id="routeShare" min="0" max="80" step="5" value="0">
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Tools &amp; MCP integrations</h2>
+        <div class="sub" style="margin-bottom:10px;">Per-call costs of what the agent touches. Adjust calls per task and unit price.</div>
+        <div class="tool-row" style="color:var(--muted); font-size:11px;"><span></span><span>Tool</span><span>$ / call</span><span>calls/task</span></div>
+        <div id="tools"></div>
+        <div class="row" style="margin-top:14px;"><label>Vector DB storage <span class="hint">Pinecone-class, $/month</span></label><input type="number" class="small" id="vectorFixed" value="25" min="0" step="5"></div>
+        <div class="row"><label>SaaS connector seats/tiers <span class="hint">Slack, Jira, CRM API tiers the MCP servers need, $/month</span></label><input type="number" class="small" id="saasFixed" value="50" min="0" step="10"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Infrastructure &amp; network</h2>
+        <div class="row"><label>Agent runtime hosting <span class="hint">Containers or serverless for the loop, $/month</span></label><input type="number" class="small" id="runtimeFixed" value="30" min="0" step="10"></div>
+        <div class="row"><label>Observability <span class="hint">$/trace (Langfuse-unit class). 1 trace per task.</span></label><input type="number" class="small" id="obsPerTrace" value="0.0005" min="0" step="0.0005"></div>
+        <div class="row"><label>Egress cloud</label>
+          <select id="egressCloud" style="width:130px;">
+            <option value="0.09">AWS $0.09/GB</option>
+            <option value="0.087">Azure $0.087/GB</option>
+            <option value="0.12">GCP $0.12/GB</option>
+            <option value="0">None / free tier</option>
+          </select>
+        </div>
+        <div class="row"><label>Egress volume <span class="hint">GB/month</span></label><input type="number" class="small" id="egressGB" value="20" min="0" step="10"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Self-hosted comparison</h2>
+        <div class="sub" style="margin-bottom:10px;">Open-weight model on rented GPUs vs the API bill above.</div>
+        <div class="row"><label>GPU</label><select id="gpuSelect" style="width:200px;"></select></div>
+        <div class="row"><label>GPU count</label><input type="number" class="small" id="gpuCount" value="1" min="1" max="64" step="1"></div>
+        <div class="slider-row">
+          <div class="top"><label>Aggregate throughput <span class="hint">tokens/sec across all GPUs, batched vLLM-class serving</span></label><span class="val" id="tpVal">1200</span></div>
+          <input type="range" id="throughput" min="100" max="10000" step="100" value="1200">
+        </div>
+        <div class="slider-row">
+          <div class="top"><label>Utilization <span class="hint">Share of rented hours doing useful work</span></label><span class="val" id="utilVal">50%</span></div>
+          <input type="range" id="utilization" min="5" max="95" step="5" value="50">
+        </div>
+        <div class="sh-note" id="shNote"></div>
+      </div>
+
+    </div>
+    <div><!-- RIGHT: results -->
+
+      <div class="kpis">
+        <div class="kpi"><div class="label">Cost per task</div><div class="value" id="kpiTask">–</div><div class="delta" id="kpiTaskSub"></div></div>
+        <div class="kpi"><div class="label">Per day</div><div class="value" id="kpiDay">–</div><div class="delta" id="kpiDaySub"></div></div>
+        <div class="kpi"><div class="label">Per month</div><div class="value" id="kpiMonth">–</div><div class="delta" id="kpiMonthSub"></div></div>
+        <div class="kpi"><div class="label">Self-hosted / month</div><div class="value" id="kpiSelf">–</div><div class="delta" id="kpiSelfSub"></div></div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-box">
+          <h2>Monthly cost breakdown</h2>
+          <canvas id="breakChart"></canvas>
+        </div>
+        <div class="chart-box">
+          <h2>API vs self-hosted breakeven</h2>
+          <canvas id="breakevenChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <h2>Where the money goes (monthly)</h2>
+        <div class="breakdown-list" id="breakList"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Same workload across models</h2>
+        <div class="sub" style="margin-bottom:8px;">Click a row to switch the primary model.</div>
+        <table id="modelTable">
+          <thead><tr><th>Model</th><th class="num">$/M in</th><th class="num">$/M out</th><th class="num">Per task</th><th class="num">Per month</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Token math for one task</h2>
+        <div id="tokenMath" style="font-size:12.5px; line-height:1.8;"></div>
+      </div>
+
+      <div class="panel">
+        <details>
+          <summary>Edit the embedded price dataset (model rates, GPU rates)</summary>
+          <div style="margin-top:10px;">
+            <table id="priceEdit"><thead><tr><th>Model</th><th class="num">$/M input</th><th class="num">$/M output</th><th class="num">Cache read ×</th></tr></thead><tbody></tbody></table>
+            <table id="gpuEdit" style="margin-top:14px;"><thead><tr><th>GPU option</th><th class="num">$/GPU-hour</th></tr></thead><tbody></tbody></table>
+          </div>
+        </details>
+        <div class="footnote">
+          Rates collected June 12, 2026 from provider pricing pages and public trackers. Anthropic: Fable 5 $10/$50, Opus 4.8 $5/$25, Sonnet 4.6 $3/$15, Haiku 4.5 $1/$5 per million tokens; cache reads 10% of input, cache writes 1.25×. OpenAI: GPT-5.5 $5/$30, GPT-5.4 $2.50/$15, cached input at 10%. Google: Gemini 3.1 Pro $2/$12, 3.5 Flash $1.50/$9, 3 Flash $0.50/$3. DeepSeek V4 Flash $0.14/$0.28 with ~98% cache-hit discount. GPU rates span neoclouds (Lambda, RunPod) to hyperscalers (AWS, GCP, Azure). Egress: first 100 GB/month free on the big three, then the per-GB rates shown. Throughput defaults assume a 70B-class FP8 model under batched vLLM serving; tune the slider to your own benchmark. This is an estimate model, not a quote.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============ DATASET (June 12, 2026) ============ */
+const DATA = {
+  models: [
+    {id:"fable5",   name:"Claude Fable 5",        family:"anthropic", inP:10,   outP:50,   cacheRead:0.10, cacheWrite:1.25},
+    {id:"opus48",   name:"Claude Opus 4.8",       family:"anthropic", inP:5,    outP:25,   cacheRead:0.10, cacheWrite:1.25},
+    {id:"sonnet46", name:"Claude Sonnet 4.6",     family:"anthropic", inP:3,    outP:15,   cacheRead:0.10, cacheWrite:1.25},
+    {id:"haiku45",  name:"Claude Haiku 4.5",      family:"anthropic", inP:1,    outP:5,    cacheRead:0.10, cacheWrite:1.25},
+    {id:"gpt55",    name:"GPT-5.5",               family:"openai",    inP:5,    outP:30,   cacheRead:0.10, cacheWrite:1.0},
+    {id:"gpt54",    name:"GPT-5.4",               family:"openai",    inP:2.5,  outP:15,   cacheRead:0.10, cacheWrite:1.0},
+    {id:"gpt54n",   name:"GPT-5.4 Nano",          family:"openai",    inP:0.2,  outP:1.25, cacheRead:0.10, cacheWrite:1.0},
+    {id:"gem31p",   name:"Gemini 3.1 Pro",        family:"google",    inP:2,    outP:12,   cacheRead:0.25, cacheWrite:1.0},
+    {id:"gem35f",   name:"Gemini 3.5 Flash",      family:"google",    inP:1.5,  outP:9,    cacheRead:0.25, cacheWrite:1.0},
+    {id:"gem3f",    name:"Gemini 3 Flash",        family:"google",    inP:0.5,  outP:3,    cacheRead:0.25, cacheWrite:1.0},
+    {id:"dsv4f",    name:"DeepSeek V4 Flash",     family:"deepseek",  inP:0.14, outP:0.28, cacheRead:0.02, cacheWrite:1.0},
+    {id:"llama4m",  name:"Llama 4 Maverick (hosted)", family:"meta",  inP:0.27, outP:0.85, cacheRead:1.0,  cacheWrite:1.0}
+  ],
+  cheapestInFamily: {anthropic:"haiku45", openai:"gpt54n", google:"gem3f", deepseek:"dsv4f", meta:"llama4m"},
+  gpus: [
+    {id:"h100_neo",  name:"H100 80GB · neocloud (Lambda/RunPod)", rate:2.69},
+    {id:"h100_aws",  name:"H100 80GB · AWS",                      rate:7.50},
+    {id:"h100_gcp",  name:"H100 80GB · GCP",                      rate:10.50},
+    {id:"h100_az",   name:"H100 80GB · Azure",                    rate:12.25},
+    {id:"h200_neo",  name:"H200 141GB · neocloud",                rate:4.39},
+    {id:"b200_neo",  name:"B200 · neocloud",                      rate:5.29},
+    {id:"b200_aws",  name:"B200 · AWS",                           rate:14.24},
+    {id:"a100_neo",  name:"A100 80GB · neocloud",                 rate:1.99}
+  ],
+  tools: [
+    {id:"search",  name:"Web search (Serper-class)",      price:0.001,  calls:3, on:true},
+    {id:"searchP", name:"Web search, premium (Tavily)",   price:0.008,  calls:0, on:false},
+    {id:"fetch",   name:"Page fetch / scrape",            price:0.001,  calls:2, on:true},
+    {id:"sandbox", name:"Code sandbox exec (E2B-class)",  price:0.002,  calls:0, on:false},
+    {id:"vector",  name:"Vector DB query",                price:0.0001, calls:4, on:true},
+    {id:"embed",   name:"Embedding call",                 price:0.0002, calls:2, on:false}
+  ]
+};
+
+const PRESETS = {
+  light:  {label:"Support bot",     desc:"200 tasks/d · 5 steps",  tasksPerDay:200, steps:5,  sysTokens:3000,  userTokens:200, outPerStep:300,  toolTokens:500,  cacheHit:80, model:"haiku45",  route:0,
+           tools:{search:1,fetch:0,sandbox:0,vector:2,embed:0,searchP:0}},
+  medium: {label:"Research agent",  desc:"50 tasks/d · 15 steps",  tasksPerDay:50,  steps:15, sysTokens:8000,  userTokens:400, outPerStep:800,  toolTokens:1500, cacheHit:70, model:"sonnet46", route:20,
+           tools:{search:6,fetch:8,sandbox:0,vector:3,embed:2,searchP:0}},
+  heavy:  {label:"Coding agent",    desc:"30 tasks/d · 40 steps",  tasksPerDay:30,  steps:40, sysTokens:12000, userTokens:600, outPerStep:1200, toolTokens:2000, cacheHit:85, model:"opus48",   route:30,
+           tools:{search:2,fetch:1,sandbox:15,vector:0,embed:0,searchP:0}},
+  custom: {label:"Custom",          desc:"your own dials"}
+};
+
+const SLIDERS = [
+  {id:"tasksPerDay", label:"Tasks per day",            min:1,    max:2000,  step:1,   val:50,   hint:"Agent runs kicked off daily"},
+  {id:"steps",       label:"Steps per task",           min:1,    max:80,    step:1,   val:15,   hint:"LLM round trips; each tool call is one step"},
+  {id:"sysTokens",   label:"System + tool defs tokens",min:500,  max:30000, step:500, val:8000, hint:"Re-sent every step; the cache target"},
+  {id:"userTokens",  label:"User input tokens",        min:0,    max:5000,  step:100, val:400,  hint:"The initial request"},
+  {id:"outPerStep",  label:"Output tokens per step",   min:50,   max:4000,  step:50,  val:800,  hint:"Includes thinking tokens"},
+  {id:"toolTokens",  label:"Tool result tokens per step",min:0,  max:10000, step:100, val:1500, hint:"Results appended to context each step"},
+  {id:"cacheHit",    label:"Prompt cache hit rate",    min:0,    max:95,    step:5,   val:70,   hint:"% of repeated context served from cache", pct:true}
+];
+
+const S = { model:"sonnet46", gpu:"h100_neo", preset:"medium" };
+const $ = id => document.getElementById(id);
+const fmt = (n, d) => {
+  if (!isFinite(n)) return "–";
+  if (d === undefined) d = n >= 100 ? 0 : n >= 1 ? 2 : 4;
+  return "$" + n.toLocaleString("en-US", {minimumFractionDigits:d, maximumFractionDigits:d});
+};
+const fmtTok = n => n >= 1e6 ? (n/1e6).toFixed(2)+"M" : n >= 1e3 ? (n/1e3).toFixed(1)+"k" : String(Math.round(n));
+
+/* ============ CORE MATH ============ */
+// Tokens for one task. Context grows each step: step i input = sys + user + (i-1)*(out + toolResult)
+function taskTokens(p){
+  const N = p.steps, base = p.sysTokens + p.userTokens, grow = p.outPerStep + p.toolTokens;
+  const totalInput  = N*base + grow * (N*(N-1)/2);
+  const totalOutput = N * p.outPerStep;
+  const newTokens   = N * grow;            // freshly written context (cache-write candidates)
+  return {totalInput, totalOutput, newTokens};
+}
+
+function llmCostPerTask(p, model){
+  const t = taskTokens(p);
+  const h = p.cacheHit/100;
+  const inP = model.inP/1e6, outP = model.outP/1e6;
+  // cached share billed at cacheRead multiplier, uncached at full rate
+  let cost = t.totalInput * ((1-h) + h*model.cacheRead) * inP + t.totalOutput * outP;
+  // cache write premium on newly appended tokens (Anthropic-style), only meaningful if caching is used
+  if (model.cacheWrite > 1 && h > 0) cost += t.newTokens * inP * (model.cacheWrite - 1);
+  return {cost, t};
+}
+
+function blendedLLM(p){
+  const m = DATA.models.find(x=>x.id===S.model);
+  const share = p.route/100;
+  const main = llmCostPerTask(p, m);
+  if (share <= 0) return {cost:main.cost, t:main.t, m};
+  const cheap = DATA.models.find(x=>x.id===DATA.cheapestInFamily[m.family]);
+  if (!cheap || cheap.id === m.id) return {cost:main.cost, t:main.t, m};
+  const c = llmCostPerTask(p, cheap);
+  return {cost: main.cost*(1-share) + c.cost*share, t:main.t, m};
+}
+
+function toolCostPerTask(){
+  let sum = 0;
+  for (const tl of DATA.tools) if (tl.on && tl.calls>0) sum += tl.price * tl.calls;
+  return sum;
+}
+
+function readParams(){
+  const p = {};
+  for (const s of SLIDERS) p[s.id] = +$(s.id).value;
+  p.route = +$("routeShare").value;
+  return p;
+}
+
+function selfHosted(p, monthlyTokens){
+  const gpu = DATA.gpus.find(g=>g.id===S.gpu);
+  const n = +$("gpuCount").value, tp = +$("throughput").value, util = +$("utilization").value/100;
+  const monthlyFixed = gpu.rate * n * 730;
+  const capacityTokens = tp * 3600 * 730 * util;     // tokens/month at this utilization
+  const perM = monthlyFixed / (capacityTokens/1e6);  // effective $/M tokens
+  return {gpu, n, monthlyFixed, capacityTokens, perM, covered: capacityTokens >= monthlyTokens};
+}
+
+/* ============ RENDER ============ */
+let breakChart, breakevenChart;
+const COLORS = ["#5b9cff","#34d399","#fbbf24","#f87171","#a78bfa","#22d3ee","#f472b6"];
+
+function compute(){
+  const p = readParams();
+  const days = 30.4;
+  const llm = blendedLLM(p);
+  const tools = toolCostPerTask();
+  const obs = +$("obsPerTrace").value;
+  const perTaskVar = llm.cost + tools + obs;
+
+  const tasksMo = p.tasksPerDay * days;
+  const llmMo = llm.cost * tasksMo;
+  const toolsMo = tools * tasksMo;
+  const obsMo = obs * tasksMo;
+  const fixedMo = (+$("vectorFixed").value) + (+$("saasFixed").value) + (+$("runtimeFixed").value);
+  const egressMo = Math.max(0, (+$("egressGB").value) - 100) * (+$("egressCloud").value);
+  const totalMo = llmMo + toolsMo + obsMo + fixedMo + egressMo;
+  const perTask = totalMo / tasksMo;
+  const perDay = totalMo / days;
+
+  const monthlyTokens = (llm.t.totalInput + llm.t.totalOutput) * tasksMo;
+  const sh = selfHosted(p, monthlyTokens);
+  const shTotal = sh.monthlyFixed + toolsMo + obsMo + fixedMo + egressMo;
+
+  return {p, llm, tools, obs, perTaskVar, tasksMo, llmMo, toolsMo, obsMo, fixedMo, egressMo, totalMo, perTask, perDay, monthlyTokens, sh, shTotal};
+}
+
+function render(){
+  const r = compute();
+
+  $("kpiTask").textContent = fmt(r.perTask);
+  $("kpiTaskSub").textContent = fmt(r.llm.cost) + " of it is the model";
+  $("kpiDay").textContent = fmt(r.perDay);
+  $("kpiDaySub").textContent = r.p.tasksPerDay + " tasks";
+  $("kpiMonth").textContent = fmt(r.totalMo);
+  $("kpiMonthSub").textContent = fmtTok(r.monthlyTokens) + " tokens/mo";
+  $("kpiSelf").textContent = fmt(r.shTotal);
+  const diff = r.shTotal - r.totalMo;
+  $("kpiSelfSub").innerHTML = diff <= 0
+    ? '<span class="good">saves ' + fmt(-diff) + '/mo vs API</span>'
+    : '<span class="warntx">' + fmt(diff) + '/mo more than API</span>';
+
+  // breakdown doughnut
+  const labels = ["Model: input","Model: output","Tools / MCP","Observability","Fixed infra","Egress"];
+  const t = r.llm.t, h = r.p.cacheHit/100;
+  const m = DATA.models.find(x=>x.id===S.model);
+  const inCost = (t.totalInput * ((1-h)+h*m.cacheRead) * m.inP/1e6 + (m.cacheWrite>1&&h>0 ? t.newTokens*m.inP/1e6*(m.cacheWrite-1):0)) * r.tasksMo;
+  const outCost = t.totalOutput * m.outP/1e6 * r.tasksMo;
+  const scale = (inCost+outCost)>0 ? r.llmMo/(inCost+outCost) : 1; // adjust for routing blend
+  const vals = [inCost*scale, outCost*scale, r.toolsMo, r.obsMo, r.fixedMo, r.egressMo];
+  if (breakChart) { breakChart.data.datasets[0].data = vals; breakChart.update(); }
+  else breakChart = new Chart($("breakChart"), {type:"doughnut",
+    data:{labels, datasets:[{data:vals, backgroundColor:COLORS, borderWidth:0}]},
+    options:{plugins:{legend:{position:"right", labels:{color:"#8b94a8", boxWidth:10, font:{size:11}}}}, maintainAspectRatio:false}});
+
+  // breakdown list
+  const total = vals.reduce((a,b)=>a+b,0) || 1;
+  $("breakList").innerHTML = labels.map((l,i)=>
+    '<div class="row"><span><span class="dot" style="background:'+COLORS[i]+'"></span>'+l+'</span><span>'+fmt(vals[i])+' <span class="pill">'+(100*vals[i]/total).toFixed(1)+'%</span></span></div>').join("");
+
+  // breakeven chart: monthly cost vs tasks/day
+  const maxTasks = Math.max(r.p.tasksPerDay*3, 100);
+  const xs = []; for (let i=0;i<=20;i++) xs.push(Math.round(maxTasks*i/20));
+  const perTaskAPI = r.llm.cost + r.tools + r.obs;
+  const apiLine = xs.map(x=> x*30.4*perTaskAPI + r.fixedMo + r.egressMo);
+  const shLine = xs.map(x=> r.sh.monthlyFixed + x*30.4*(r.tools + r.obs) + r.fixedMo + r.egressMo);
+  const cfg = {labels:xs, datasets:[
+    {label:"API ("+m.name+")", data:apiLine, borderColor:"#5b9cff", backgroundColor:"transparent", tension:.2, pointRadius:0},
+    {label:"Self-hosted ("+r.sh.gpu.name.split(" · ")[0]+" ×"+r.sh.n+")", data:shLine, borderColor:"#34d399", backgroundColor:"transparent", tension:.2, pointRadius:0}
+  ]};
+  if (breakevenChart){ breakevenChart.data = cfg; breakevenChart.update(); }
+  else breakevenChart = new Chart($("breakevenChart"), {type:"line", data:cfg,
+    options:{plugins:{legend:{labels:{color:"#8b94a8", boxWidth:14, font:{size:11}}}},
+      scales:{x:{title:{display:true,text:"tasks per day",color:"#8b94a8"}, ticks:{color:"#8b94a8"}, grid:{color:"#1f2735"}},
+              y:{ticks:{color:"#8b94a8", callback:v=>"$"+(v>=1000?(v/1000)+"k":v)}, grid:{color:"#1f2735"}}},
+      maintainAspectRatio:false}});
+
+  // self-hosted note
+  const capPct = r.monthlyTokens / r.sh.capacityTokens * 100;
+  $("shNote").innerHTML =
+    "Effective rate: <b>" + fmt(r.sh.perM,2) + "/M tokens</b> at " + $("utilization").value + "% utilization · " +
+    "GPU rent " + fmt(r.sh.monthlyFixed,0) + "/mo · capacity " + fmtTok(r.sh.capacityTokens) + " tokens/mo. " +
+    (r.sh.covered
+      ? "Your workload uses <b>" + capPct.toFixed(1) + "%</b> of that capacity." + (capPct < 25 ? " <span class='warntx'>Heavily underused; the API will likely beat this.</span>" : "")
+      : "<span class='badtx'>Workload exceeds capacity; add GPUs or raise throughput.</span>");
+
+  // model comparison table
+  const tb = $("modelTable").querySelector("tbody");
+  tb.innerHTML = DATA.models.map(mm=>{
+    const c = llmCostPerTask(r.p, mm);
+    const mo = c.cost * r.tasksMo + r.toolsMo + r.obsMo + r.fixedMo + r.egressMo;
+    return '<tr class="clickable'+(mm.id===S.model?' selected':'')+'" data-id="'+mm.id+'">'+
+      '<td>'+mm.name+'</td><td class="num">'+fmt(mm.inP,2)+'</td><td class="num">'+fmt(mm.outP,2)+'</td>'+
+      '<td class="num">'+fmt(c.cost)+'</td><td class="num">'+fmt(mo,0)+'</td></tr>';
+  }).join("");
+  tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>{ S.model=tr.dataset.id; $("modelSelect").value=S.model; setPreset("custom"); render(); });
+
+  // token math explainer
+  $("tokenMath").innerHTML =
+    "One task = <b>" + r.p.steps + " steps</b>. Each step re-sends the growing context, so input scales with steps squared.<br>" +
+    "Total input: <b>" + fmtTok(t.totalInput) + "</b> tokens (" + fmtTok(t.totalInput/r.p.steps) + " avg/step) · " +
+    "Total output: <b>" + fmtTok(t.totalOutput) + "</b> · New context written: " + fmtTok(t.newTokens) + ".<br>" +
+    "At " + r.p.cacheHit + "% cache hit, " + fmtTok(t.totalInput*h) + " input tokens bill at " + (m.cacheRead*100) + "% of the input rate.<br>" +
+    "Model cost per task: <b>" + fmt(r.llm.cost) + "</b> · Tools: " + fmt(r.tools) + " · Observability: " + fmt(r.obs) + ".";
+}
+
+/* ============ UI BUILD ============ */
+function buildSliders(){
+  $("workload-sliders").innerHTML = SLIDERS.map(s=>
+    '<div class="slider-row"><div class="top"><label>'+s.label+' <span class="hint">'+s.hint+'</span></label>'+
+    '<span class="val" id="'+s.id+'Val">'+(s.pct?s.val+"%":s.val.toLocaleString())+'</span></div>'+
+    '<input type="range" id="'+s.id+'" min="'+s.min+'" max="'+s.max+'" step="'+s.step+'" value="'+s.val+'"></div>').join("");
+  for (const s of SLIDERS) $(s.id).oninput = ()=>{ $(s.id+"Val").textContent = s.pct? $(s.id).value+"%" : (+$(s.id).value).toLocaleString(); setPreset("custom"); render(); };
+}
+
+function buildModels(){
+  $("modelSelect").innerHTML = DATA.models.map(mm=>'<option value="'+mm.id+'">'+mm.name+' ('+fmt(mm.inP,2)+' / '+fmt(mm.outP,2)+' per M)</option>').join("");
+  $("modelSelect").value = S.model;
+  $("modelSelect").onchange = ()=>{ S.model = $("modelSelect").value; setPreset("custom"); render(); };
+  $("routeShare").oninput = ()=>{ $("routeVal").textContent = $("routeShare").value+"%"; setPreset("custom"); render(); };
+}
+
+function buildTools(){
+  $("tools").innerHTML = DATA.tools.map((tl,i)=>
+    '<div class="tool-row">'+
+    '<input type="checkbox" data-i="'+i+'" class="tl-on" '+(tl.on?"checked":"")+'>'+
+    '<span class="name">'+tl.name+'</span>'+
+    '<input type="number" class="small tl-price" data-i="'+i+'" value="'+tl.price+'" min="0" step="0.001">'+
+    '<input type="number" class="small tl-calls" data-i="'+i+'" value="'+tl.calls+'" min="0" step="1">'+
+    '</div>').join("");
+  document.querySelectorAll(".tl-on").forEach(el=>el.onchange=()=>{ DATA.tools[+el.dataset.i].on=el.checked; setPreset("custom"); render(); });
+  document.querySelectorAll(".tl-price").forEach(el=>el.oninput=()=>{ DATA.tools[+el.dataset.i].price=+el.value||0; render(); });
+  document.querySelectorAll(".tl-calls").forEach(el=>el.oninput=()=>{ DATA.tools[+el.dataset.i].calls=+el.value||0; setPreset("custom"); render(); });
+}
+
+function buildGpus(){
+  $("gpuSelect").innerHTML = DATA.gpus.map(g=>'<option value="'+g.id+'">'+g.name+' ('+fmt(g.rate,2)+'/hr)</option>').join("");
+  $("gpuSelect").value = S.gpu;
+  $("gpuSelect").onchange = ()=>{ S.gpu=$("gpuSelect").value; render(); };
+  $("throughput").oninput = ()=>{ $("tpVal").textContent=(+$("throughput").value).toLocaleString(); render(); };
+  $("utilization").oninput = ()=>{ $("utilVal").textContent=$("utilization").value+"%"; render(); };
+  $("gpuCount").oninput = render;
+}
+
+function buildPresets(){
+  $("presets").innerHTML = Object.entries(PRESETS).map(([k,v])=>
+    '<div class="preset" id="preset-'+k+'" data-k="'+k+'"><b>'+v.label+'</b><span>'+v.desc+'</span></div>').join("");
+  document.querySelectorAll(".preset").forEach(el=>el.onclick=()=>applyPreset(el.dataset.k));
+}
+
+function setPreset(k){
+  S.preset = k;
+  document.querySelectorAll(".preset").forEach(el=>el.classList.toggle("active", el.dataset.k===k));
+}
+
+function applyPreset(k){
+  setPreset(k);
+  if (k==="custom") { render(); return; }
+  const pr = PRESETS[k];
+  for (const s of SLIDERS){
+    if (pr[s.id]!==undefined){ $(s.id).value = pr[s.id]; $(s.id+"Val").textContent = s.pct? pr[s.id]+"%" : pr[s.id].toLocaleString(); }
+  }
+  S.model = pr.model; $("modelSelect").value = pr.model;
+  $("routeShare").value = pr.route; $("routeVal").textContent = pr.route+"%";
+  for (const tl of DATA.tools){ const c = pr.tools[tl.id]||0; tl.calls=c; tl.on=c>0; }
+  buildTools();
+  render();
+}
+
+function buildPriceEdit(){
+  const tb = $("priceEdit").querySelector("tbody");
+  tb.innerHTML = DATA.models.map((mm,i)=>
+    '<tr><td>'+mm.name+'</td>'+
+    '<td class="num"><input type="number" class="small pe-in" data-i="'+i+'" value="'+mm.inP+'" step="0.01" min="0"></td>'+
+    '<td class="num"><input type="number" class="small pe-out" data-i="'+i+'" value="'+mm.outP+'" step="0.01" min="0"></td>'+
+    '<td class="num"><input type="number" class="small pe-cr" data-i="'+i+'" value="'+mm.cacheRead+'" step="0.01" min="0" max="1"></td></tr>').join("");
+  tb.querySelectorAll(".pe-in").forEach(el=>el.oninput=()=>{ DATA.models[+el.dataset.i].inP=+el.value||0; buildModels(); render(); });
+  tb.querySelectorAll(".pe-out").forEach(el=>el.oninput=()=>{ DATA.models[+el.dataset.i].outP=+el.value||0; buildModels(); render(); });
+  tb.querySelectorAll(".pe-cr").forEach(el=>el.oninput=()=>{ DATA.models[+el.dataset.i].cacheRead=+el.value||0; render(); });
+  const gb = $("gpuEdit").querySelector("tbody");
+  gb.innerHTML = DATA.gpus.map((g,i)=>
+    '<tr><td>'+g.name+'</td><td class="num"><input type="number" class="small ge-r" data-i="'+i+'" value="'+g.rate+'" step="0.01" min="0"></td></tr>').join("");
+  gb.querySelectorAll(".ge-r").forEach(el=>el.oninput=()=>{ DATA.gpus[+el.dataset.i].rate=+el.value||0; buildGpus(); render(); });
+}
+
+["vectorFixed","saasFixed","runtimeFixed","obsPerTrace","egressGB"].forEach(id=>{ window.addEventListener("DOMContentLoaded",()=>{ $(id).oninput=render; $("egressCloud").onchange=render; }); });
+
+buildSliders(); buildModels(); buildTools(); buildGpus(); buildPresets(); buildPriceEdit();
+applyPreset("medium");
+</script>
+</body>
+</html>
