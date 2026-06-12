@@ -6,7 +6,7 @@
 <title>Agentic AI Pricing Tool</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  :root{
+:root{
     --bg:#0e1117; --panel:#161b24; --panel2:#1c2330; --border:#2a3346;
     --text:#e6e9f0; --muted:#8b94a8; --accent:#5b9cff; --accent2:#34d399;
     --warn:#fbbf24; --bad:#f87171; --radius:10px;
@@ -257,7 +257,6 @@ const SLIDERS = [
   {id:"toolTokens",  label:"Tool result tokens per step",min:0,  max:10000, step:100, val:1500, hint:"Results appended to context each step"},
   {id:"cacheHit",    label:"Prompt cache hit rate",    min:0,    max:95,    step:5,   val:70,   hint:"% of repeated context served from cache", pct:true}
 ];
-
 const S = { model:"sonnet46", gpu:"h100_neo", preset:"medium" };
 const $ = id => document.getElementById(id);
 const fmt = (n, d) => {
