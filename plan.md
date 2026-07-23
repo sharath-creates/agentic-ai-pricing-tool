@@ -1,117 +1,177 @@
-# Plan — updated July 23, 2026
+# Plan — from single-file calculator to an AI cost-decision platform
 
-A re-plan after a full codebase review. Supersedes the implicit plan of "three parallel
-issues farmed out on June 12."
+Updated July 23, 2026. Supersedes the maintenance-only plan.
 
-## Where things stand (verified today)
+## The reframe
 
-- **Sources and artifact are in sync.** `node build.js` on `main` reproduces
-  `agentic-ai-pricing-tool.html` byte-identical. The codebase is small and clean:
-  ~250 lines of app logic, 57 lines of data, no dependencies beyond Chart.js from CDN.
-- **The $937 invariant holds.** Recomputing the medium preset from `src/data.js` gives
-  $936.68/month (totalInput 367,500; totalOutput 12,000), matching AGENTS.md.
-- **All three work items are done-but-stranded.** Issues #1, #2, #3 each have an open
-  Jules PR (#6, #4, #5) from June 12 — six weeks unreviewed. All three branch from the
-  same `main` commit and all rewrite `src/app.js`, so they conflict pairwise: at most one
-  merges clean, the other two need rework.
-- **The pending PRs are individually sound** as far as automated checks go:
-  - PR #5 (test harness): 7/7 tests pass under `node --test`, artifact in sync.
-  - PR #4 (tornado) and #6 (URLs): artifacts in sync, built inline script passes
-    `node --check`. Not yet functionally reviewed in a browser.
-- **The dataset is going stale.** Prices are as-of June 12, 2026; it's now July 23.
+Today this repo is a single HTML file that models one scenario well: an agentic loop
+hitting an LLM API, with a self-hosted-GPU breakeven. The goal is bigger: **a platform
+where a company can figure out what running AI on their actual workloads will cost,
+compare models on cost *and* fit, and decide build-vs-buy — across the use cases most
+companies really deploy.**
 
-## What changed in the rethink
+The audience is the broad middle that almost all AI spend comes from — companies that
+are neither thin API wrappers nor labs pretraining their own models. They consume
+frontier models through APIs, sometimes fine-tune small open models, sometimes rent
+GPUs, and they all ask the same three questions:
 
-The original three issues were written as independent, parallel tasks. They aren't:
-issue #3 (extract math into `src/math.js`) restructures the exact code the other two
-build on, and issue #2 explicitly requires "no duplicated formulas," which only the
-math extraction delivers. Landing order matters. The plan below serializes them,
-then adds the guardrails whose absence caused this pile-up (no CI, no artifact-drift
-check, review-by-nobody), then a dataset refresh, then a small quality backlog found
-during review.
+1. **What will this use case cost us at our volume?**
+2. **Which model is the cheapest one that's good enough for this job?**
+3. **When (if ever) should we move off the API — to a fine-tuned small model, or
+   self-hosted open weights?**
 
-## Phase 1 — Land the test harness (PR #5, closes #3)
+Nothing widely used answers all three in one place. Provider pricing pages answer
+none of them. That's the platform.
 
-First because it is the structural change: pure math moves to `src/math.js` with a
-Node-testable `computeCosts(params, dataset)`, and it carries the regression suite the
-other two phases need. Rebasing the others onto it is far cheaper than the reverse.
+## What we already have (the seed)
 
-- Review PR #5 against the AGENTS.md invariants and the docs/tasks/03 acceptance
-  criteria (tests already pass locally; artifact verified in sync).
-- Merge to `main`.
+- A cost engine that gets the hard part right: the agent-loop quadratic (context
+  regrowth per step), prompt-cache economics including Anthropic's write premium,
+  tool/MCP per-call costs, fixed infra, egress tiers, and GPU rental math.
+- A June 2026 cross-provider dataset (Anthropic, OpenAI, Google, DeepSeek, hosted
+  Llama; H100/H200/B200/A100 across neoclouds and hyperscalers).
+- Three finished-but-unmerged PRs: math extracted into a testable library (#5),
+  sensitivity/tornado analysis (#4), shareable scenario URLs (#6). All three are
+  platform prerequisites, not maintenance chores: #5 is the core engine as a library,
+  #4 is a decision feature, #6 is the first sharing/collaboration feature.
 
-## Phase 2 — Rework and land the tornado panel (PR #4, closes #2)
+Everything below builds on these; nothing is thrown away.
 
-PR #4 did its own "centralize the compute" refactor of `src/app.js`, which now collides
-head-on with Phase 1's `math.js`. Expect a rework, not a mechanical rebase:
+---
 
-- Rebuild the panel on top of `computeCosts(params)` from `src/math.js` — this is what
-  finally satisfies the "single source of truth for math" acceptance criterion.
-- Side benefit to verify while here: the breakdown doughnut currently re-implements the
-  cache-billing formula inline (`render()` in `src/app.js`) — that duplication should
-  disappear in this rework.
-- Re-check acceptance: steps/task shows top-two impact on the medium preset; total
-  still ~$937.
+## Phase 1 — Harden the engine (1–2 weeks of work, mostly done)
 
-## Phase 3 — Rework and land shareable URLs (PR #6, closes #1)
+Land the pending PRs in dependency order — #5 (math library + tests), then #4
+(tornado, reworked on top of the library), then #6 (shareable URLs) — plus CI that
+enforces build/artifact sync and runs the regression suite. Details were in the
+previous revision of this plan; the short version: `src/math.js` +
+`computeCosts(params, dataset)` becomes **the** engine every platform surface calls,
+with the ~$937 medium-preset regression test guarding it.
 
-Smallest conflict surface (state serialize/restore + init sequence + a header button),
-so it goes last.
+Exit criterion: a pure, DOM-free, tested cost engine and a datestamped dataset file,
+both importable outside this page.
 
-- Rebase onto post-Phase-2 `main`; the init-sequence changes will need re-threading.
-- Re-verify the acceptance criteria by hand: copy-link round trip reproduces KPIs,
-  bare URL loads the medium preset, malformed hash falls back silently.
+## Phase 2 — Use-case library: model what companies actually run
 
-## Phase 4 — CI and guardrails (new)
+The current tool models one workload shape (multi-step agent loop). Companies run
+maybe a dozen distinct shapes, each with different cost physics. Build each as a
+first-class **workload template** — its own math profile, presets, and explainer —
+not just a slider preset:
 
-The June pile-up happened because nothing enforced review or verification. Add a
-GitHub Actions workflow that runs on every PR:
+| Use case | What's different about its cost math |
+|---|---|
+| **Customer support automation** | High volume, short contexts, huge cache hit on system prompt; deflection-rate ROI (cost per resolved ticket vs human cost) |
+| **Coding agents / SWE automation** | Deep loops (40–100+ steps), giant contexts, cache-write heavy; cost per merged PR |
+| **RAG knowledge assistant** | Embedding + vector store + reranker costs dominate at scale; chunking strategy changes token volume 5–10× |
+| **Document intelligence** (contracts, claims, invoices, KYC) | Batch not interactive → batch-API discounts (50%) apply; per-page/per-doc pricing; OCR + long-context tradeoff |
+| **Batch classification / extraction / ETL enrichment** | Millions of tiny calls; small-model territory; where fine-tuning pays back fastest |
+| **Meeting/call intelligence** | Audio transcription cost + summarization; per-hour-of-audio unit economics |
+| **Voice agents** | Realtime/streaming pricing, TTS+STT+LLM stack, latency floors that exclude models regardless of price |
+| **Content generation** (marketing, localization) | Output-token dominated — inverts the usual input-heavy math |
+| **Computer-use / browser agents** | Screenshot tokens per step (vision input), very long loops, high failure/retry rates baked into cost |
+| **Internal copilots** (Slack/email/CRM embedded) | Per-seat SaaS + MCP connector tiers dominate over tokens at low volume |
 
-1. `node build.js && git diff --exit-code` — fails if the committed artifact doesn't
-   match `src/` (the "never edit the artifact by hand / always commit both" rule,
-   currently enforced only by AGENTS.md prose).
-2. `node --check` on the script extracted from the built HTML (catches module syntax
-   leaking into the browser build).
-3. `node --test` (meaningful from Phase 1 onward, including the ~$937 end-to-end
-   regression).
+Each template ships with: editable token/volume profile, the right unit economics
+("per resolved ticket", "per document", "per merged PR" — not just per task), and a
+comparison across models *for that shape*.
 
-## Phase 5 — Dataset refresh (new)
+This phase is where "think beyond wrappers" becomes concrete: the templates encode
+how real workloads differ, which is exactly what generic pricing pages can't do.
 
-- Re-collect model, GPU, tool, and egress prices; bump the as-of date in all three
-  places (`src/data.js` header comment, page header badge, footnote) per the
-  AGENTS.md dataset rule, citing sources in the PR.
-- If any price change moves the medium preset off ~$937, update the invariant in
-  AGENTS.md, docs/tasks/02 and 03, and the tests in the same PR, and say so
-  explicitly.
-- Recurring: repeat roughly monthly, or when a major provider reprices.
+Engine work required: batch-API pricing tiers, per-modality pricing (vision, audio,
+realtime), retry/failure-rate multiplier, and pluggable unit-economics denominators.
 
-## Phase 6 — Model-quality backlog (new, in rough priority order)
+## Phase 3 — The third option: fine-tuning and small-model routing
 
-Findings from the review; each is a small, separable issue.
+The current tool compares API vs self-hosted rented GPUs. The decision most companies
+actually face is three-way, and the middle option is missing:
 
-1. **Breakeven chart ignores capacity limits.** The self-hosted line holds GPU rent
-   constant as tasks/day grows, even past the point where the configured GPUs can't
-   serve the tokens. Step the line up as additional GPUs become necessary — otherwise
-   the crossover point is optimistic.
-2. **Routing blend is per-task, not per-step.** "Route easy steps to a cheap model"
-   actually blends whole-task costs (`blendedLLM` in `src/app.js`), which ignores that
-   cheap-model steps still pay full-context input. Either model it per-step or relabel
-   the control honestly ("share of tasks routed to the cheap model").
-3. **Self-hosted throughput conflates prefill and decode.** Capacity counts input and
-   output tokens against one tokens/sec dial; prefill throughput is orders of magnitude
-   higher than decode. A two-dial (or decode-only) model would make the breakeven
-   materially more accurate. Document the simplification meanwhile.
-4. **Init-wiring cleanup.** The fixed-cost input loop at the bottom of `src/app.js`
-   registers five `DOMContentLoaded` listeners and reassigns the `egressCloud` handler
-   five times; assign handlers directly (the script already runs at end of body).
-5. **Offline story.** The single-file promise breaks without network: Chart.js comes
-   from cdnjs, so charts silently vanish offline. Options: inline Chart.js into the
-   artifact (~200 KB, needs an AGENTS.md constraint change) or render a text fallback
-   when `Chart` is undefined. Decide before doing.
+- **Fine-tuned small model** as a use-case-specific alternative: training cost
+  (one-off + refresh cadence), hosted-inference price of the tuned model, the
+  accuracy-vs-frontier gap, and the volume threshold where it wins.
+- **Router/cascade modeling done honestly**: cheap model first, escalate on
+  low-confidence — modeled per-step with escalation rates, replacing today's
+  whole-task blend (a known weakness of the current `blendedLLM`).
+- **Distillation path**: frontier model generates labels → small model serves. This
+  is the pattern the "middle" companies increasingly use; nobody prices it end-to-end.
 
-## Out of scope (unchanged constraints)
+Exit criterion: every use-case template shows a three-way build/buy/tune comparison
+with the crossover volumes marked.
 
-- Sharing edited dataset prices in URLs (explicitly excluded by task 01).
-- localStorage/sessionStorage, frameworks, analytics, any backend — all still banned
-  per AGENTS.md.
-- The one-file distributable model itself: it's the product, not a limitation.
+## Phase 4 — Comparison beyond price: "cheapest model that's good enough"
+
+Price-per-token comparison is necessary but not sufficient — a model that's 3× cheaper
+and can't do the job costs infinitely more. Add a fit layer:
+
+- **Capability data per use case**: curated public benchmark results mapped to each
+  template (SWE-bench-class for coding agents, doc-VQA for document intelligence,
+  etc.), shown next to cost — producing a cost-per-quality view, not a leaderboard.
+- **Operational constraints** that disqualify models before price matters: context
+  window vs the template's context profile, latency class (voice needs streaming
+  TTFT), rate limits vs required throughput, data-residency/zero-retention options.
+- Output: for each use case, a shortlist — "these 3 models clear the bar; here's the
+  monthly bill for each at your volume" — which is the actual purchasing decision.
+
+Keep this honest and sourced: public benchmarks with citations and dates, user-editable
+like the price dataset. No invented quality scores.
+
+## Phase 5 — Platform mechanics: from page to product
+
+Architecture evolves in steps, keeping the zero-backend property as long as possible:
+
+1. **Static multi-page site** (the calculator becomes one tool among several):
+   use-case library, comparison views, and per-model/per-use-case pages that can rank
+   on search ("what does an AI support bot cost"). Static-site generator, the vanilla
+   JS engine imported everywhere, hosted on Pages/Netlify. The single-file HTML
+   remains as a downloadable offline artifact — it's a differentiator, keep it.
+2. **Living pricing dataset as the moat**: versioned JSON in-repo, refreshed by a
+   scheduled Action that diffs provider pricing pages and opens a PR on change
+   (human-reviewed, sources cited — per current AGENTS.md dataset rules). History
+   kept, so the site can show **price-over-time charts** and "what did this workload
+   cost in January vs now" — data nobody else publishes cleanly.
+3. **Sharing → persistence**: URL-encoded scenarios (#6) first; then optional
+   accounts (Supabase-class, only when genuinely needed) for saved scenarios, team
+   workspaces, and budget tracking against projected spend.
+4. **Calibration against reality** (the long-term differentiator): let users import
+   actual usage exports/invoices (Anthropic/OpenAI usage CSVs) to calibrate their
+   template parameters from real traffic instead of guesses — and to see "your
+   effective $/task vs the model you planned." All client-side parsing first; no
+   uploaded data leaves the browser until there are accounts and an explicit reason.
+
+## Phase 6 — Reach and feedback loops
+
+- Public read-only **pricing-data API** (the versioned JSON, served statically) — lets
+  others build on the dataset and funnels credibility back.
+- Exportable outputs: PDF/one-pager per scenario for the "convince my VP" moment;
+  CSV of any table.
+- Community-contributed workload profiles: real (anonymized) token profiles per use
+  case submitted via PR, reviewed like price changes. Real usage shapes are scarce
+  and valuable; the repo becomes where they accumulate.
+
+---
+
+## Sequencing summary
+
+| Phase | Deliverable | Depends on |
+|---|---|---|
+| 1 | Tested engine library, CI, pending PRs landed | — |
+| 2 | 8–10 use-case templates with per-use-case unit economics | 1 |
+| 3 | Three-way API / self-host / fine-tune comparison, honest routing | 1, 2 |
+| 4 | Capability + constraint layer ("good enough" shortlists) | 2 |
+| 5 | Multi-page site, live dataset pipeline, sharing → accounts | 1–4 incremental |
+| 6 | Data API, exports, community profiles | 5 |
+
+Phases 2–4 are the product; 5–6 are distribution. If forced to cut, cut from the
+bottom.
+
+## Principles carried forward
+
+- **The engine stays pure and tested.** Every surface calls the same
+  `computeCosts`; invariants (agent-loop quadratic, cache math, egress tiers) stay
+  regression-tested. No formula ever lives in two places.
+- **Every number is dated, sourced, and user-editable.** The tool's credibility is
+  that it shows its work; estimates are labeled estimates.
+- **Client-side by default.** No backend until a feature is impossible without one;
+  no analytics creep; the offline single-file artifact keeps working.
+- **Model-vendor neutral.** Cross-provider comparison is the point; nothing in the
+  UI privileges a provider beyond what the numbers say.
